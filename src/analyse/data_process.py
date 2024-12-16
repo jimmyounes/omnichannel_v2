@@ -68,6 +68,7 @@ def paths_cleaning(paths):
     Remove  (direct/(None) effect from  paths and defines autonomous paths, 
     and calculate average time to purchase
     """
+    
     autonomous_paths={}
     for path in paths:
         nodes = path.split("=>")
@@ -85,12 +86,13 @@ def paths_cleaning(paths):
     for path in autonomous_paths:
         del paths[path]
     path_without_direct={}
+    
     for path in paths :
         original_path=path
         path=path.replace("=>(direct) / (none)=>","=>")
         path=path.replace("(direct) / (none)=>","")
         path=path.replace("=>(direct) / (none)","")
-        if path!="":
+        if path!="" and  path_is_autonomous(path)==False:
             if path not in path_without_direct:
                 path_without_direct[path]=paths[original_path]
             else:
@@ -100,12 +102,30 @@ def paths_cleaning(paths):
                 path_without_direct[path]["time_to_purchase"] = list(itertools.chain(
                     paths[original_path]["time_to_purchase"],
                     path_without_direct[path]["time_to_purchase"]))
+        else :
+            if(path_is_autonomous(path)):
+                if path not in autonomous_paths:
+                    autonomous_paths[path]=paths[original_path]
+                else:
+                    autonomous_paths[path]["purchased"]+=paths[original_path]["purchased"]
+                    autonomous_paths[path]["purchase_value"]+=paths[original_path]["purchase_value"]
+                    autonomous_paths[path]["viewed"]+=paths[original_path]["viewed"]
+                    autonomous_paths[path]["time_to_purchase"] = list(itertools.chain(
+                        paths[original_path]["time_to_purchase"],
+                        autonomous_paths[path]["time_to_purchase"]))
+
     for path in path_without_direct:
         if path_without_direct[path]["time_to_purchase"]:
             avg_time_to_purchase = sum(path_without_direct[path]["time_to_purchase"]) /len(path_without_direct[path]["time_to_purchase"])
         else:
             avg_time_to_purchase = None
         path_without_direct[path]["avg_time_to_purchase"]=avg_time_to_purchase
+    for path in autonomous_paths:
+        if autonomous_paths[path]["time_to_purchase"]:
+            avg_time_to_purchase = sum(autonomous_paths[path]["time_to_purchase"]) /len(autonomous_paths[path]["time_to_purchase"])
+        else:
+            avg_time_to_purchase = None
+        autonomous_paths[path]["avg_time_to_purchase"]=avg_time_to_purchase    
     return path_without_direct,autonomous_paths
 
 def assembly_purchases_by_date(users_dict):

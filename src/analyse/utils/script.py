@@ -20,3 +20,18 @@ def transform_date(date):
     parsed_date = datetime.strptime(date, "%Y%m%d%H%M")
     formatted_date = parsed_date.strftime("%Y-%m-%d")
     return formatted_date 
+def path_is_autonomous(path):
+    """
+    Define if path is autonomous or not 
+    """
+    nodes = path.split("=>")
+    if len(nodes)==1:
+            return True
+    else:
+            key = nodes[0].strip()
+            autonomous = True
+            for i in range(1,len(nodes)):
+                if key!=nodes[i].strip():
+                    autonomous = False
+                    break
+            return autonomous

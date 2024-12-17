@@ -132,11 +132,14 @@ def assembly_purchases_by_date(users_dict):
     """""
     Assembly purchases by date
     """
+    for user in users_dict:
+        users_dict[user]=sorted(users_dict[user], key=lambda x: x['date'])
     date_autonomous_results={}
     date_results={}
     for user in users_dict:
         path=""
         for touchpoint in users_dict[user]:
+            
             touchpoint["source"]=touchpoint["source"].strip()
             if path=="":
                 path=touchpoint["source"]
@@ -151,8 +154,8 @@ def assembly_purchases_by_date(users_dict):
                 for i in range(1,len(nodes)):
                     if key!=nodes[i].strip():
                         autonomous = False
-                        break
                 if autonomous is False:
+                    
                     if date2 not in date_results:
                         date_results[date2]={}
                     if path not in date_results[date2]:
@@ -162,6 +165,7 @@ def assembly_purchases_by_date(users_dict):
                     else:
                         date_results[date2][path]["purchased"]+=1
                         date_results[date2][path]["purchase_value"]+=touchpoint["purchase_value"]
+                    
                     path=""
                 else:
                     if date2 not in date_autonomous_results:
@@ -169,11 +173,45 @@ def assembly_purchases_by_date(users_dict):
                     if path not in date_autonomous_results[date2]:
                         date_autonomous_results[date2][path]={}
                         date_autonomous_results[date2][path]["purchased"]=1
+                        date_autonomous_results[date2][path]["purchase_value"]=touchpoint["purchase_value"]
                     else:
                         date_autonomous_results[date2][path]["purchased"]+=1
+                        date_autonomous_results[date2][path]["purchase_value"]+=touchpoint["purchase_value"]
                     path=""
+                   
     return date_results,date_autonomous_results
+def paths_cleaning_by_date(date_results,date_autnomous_results):
+    
+    path_without_direct={}
+    for date in date_results:
+        path_without_direct[date]={}
+        for path in date_results[date]:
+            original_path=path
 
+            path=path.replace("=>(direct) / (none)=>","=>")
+            path=path.replace("(direct) / (none)=>","")
+            path=path.replace("=>(direct) / (none)","")
+            if path!="" and  path_is_autonomous(path)==False:
+                if(date not in path_without_direct):
+                    path_without_direct[date]={}
+                if path not in path_without_direct[date]:
+                    path_without_direct[date][path]=date_results[date][original_path]
+                else:
+                    path_without_direct[date][path]["purchased"]+=date_results[date][original_path]["purchased"]
+                    path_without_direct[date][path]["purchase_value"]+=date_results[date][original_path]["purchase_value"]
+            else:
+                if(path_is_autonomous(path)):
+                    
+                    if(date not in date_autnomous_results):
+                        date_autnomous_results[date]={}
+                    if path not in date_autnomous_results[date]:
+                        date_autnomous_results[date][path]=date_results[date][original_path]
+                    else:
+                        
+                        date_autnomous_results[date][path]["purchased"]+=date_results[date][original_path]["purchased"]
+                        date_autnomous_results[date][path]["purchase_value"]+=date_results[date][original_path]["purchase_value"]
+    return path_without_direct,date_autnomous_results             
+    
 def compute_conv_for_channel_in_autonomous_paths(autonomous_path):
     """
     Calculate number of conversions and purchase value  for channel in autonomous path 

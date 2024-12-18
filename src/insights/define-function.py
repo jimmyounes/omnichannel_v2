@@ -105,5 +105,71 @@ def attribute_purchase_value_for_channels(old_markov,new_markov,lstm_model,paths
            
             if(total_new_markov!=0):     
                 results[node]["new_markov_attrbution_purchase_value"]+=new_markov[node]*paths[path]["purchase_value"]/total_new_markov
-           
     return results        
+
+def synergy_between_channels(paths,noeuds):
+    noeuds.append("start")
+    noeuds.append("end")
+    matrice = {}
+    for noeud in noeuds:
+        values = {}
+        for noeud2 in noeuds:
+            values[noeud2] = 0
+        matrice[noeud] = values
+    for path_str in paths:
+        tuples=[]
+        nodes = path_str.split("=>")
+        for i in range(len(nodes)):
+            key=nodes[i].strip()
+            if i == 0:
+                matrice["start"][key]=paths[path_str]["purchased"]+matrice["start"][key]
+            if i == len(nodes) - 1:
+                matrice[key]["end"]=matrice[key]["end"]+ paths[path_str]["purchased"]
+            else :
+                if (key,nodes[i+1].strip()) not in tuples:
+                    matrice[key][nodes[i+1].strip()]=matrice[key][nodes[i+1].strip()]+ paths[path_str]["purchased"]
+                    tuples.append((key,nodes[i+1].strip()))
+    for column in matrice :
+        total = 0
+        for column2 in matrice :
+            total  =total+matrice[column][column2]
+        total2 = 0
+        for column2 in matrice :
+            if total!=0:
+                matrice[column][column2] = matrice[column][column2]/total
+                total2 = matrice[column][column2]/total+total2
+            else :
+                matrice[column][column2] = 0
+    return matrice    
+def presence__between_channels(paths,noeuds):
+    noeuds.append("start")
+    noeuds.append("end")
+    matrice = {}
+    for noeud in noeuds:
+        values = {}
+        for noeud2 in noeuds:
+            values[noeud2] = 0
+        matrice[noeud] = values
+    for path_str in paths:
+        
+        nodes = path_str.split("=>")
+        channels=[]
+        for i in range(len(nodes)):
+            if nodes[i].strip() not in channels:
+                channels.append(nodes[i])
+        for channel in channels: 
+            for channel2 in channels : 
+                if(channel!=channel2):
+                    matrice[channel][channel2]=paths[path_str]["purchased"]
+    for column in matrice :
+        total = 0
+        for column2 in matrice :
+            total  =total+matrice[column][column2]
+        total2 = 0
+        for column2 in matrice :
+            if total!=0:
+                matrice[column][column2] = matrice[column][column2]/total
+                total2 = matrice[column][column2]/total+total2
+            else :
+                matrice[column][column2] = 0
+    return matrice        

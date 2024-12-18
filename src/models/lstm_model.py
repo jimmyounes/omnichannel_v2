@@ -15,7 +15,7 @@ def lstm_model(paths,noeuds):
             path_to_remove.append(path)
     for path in path_to_remove:
         del paths[path]  
-    print(len(paths))          
+             
     representation_binaire={} 
     binary_length = math.ceil(math.log2(len(noeuds)))  
     noeuds.insert(0, "pad_sequence")
@@ -26,8 +26,7 @@ def lstm_model(paths,noeuds):
         else:
             binary_code = [int(bit) for bit in format(idx - 1, 'b').zfill(binary_length)]
         representation_binaire[channel] = binary_code 
-        
-    print(representation_binaire["pad_sequence"])
+    
     for path in paths : 
         representation_binaire_path=[]
         path_channels=path.split("=>")

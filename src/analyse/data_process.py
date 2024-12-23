@@ -275,3 +275,26 @@ def channels_roles(multichannel_paths):
                     list_sommet[key]["assistant_ca"]+=contribution_ca
                     list_sommet[key]["presence_ca"]+=+contribution_ca
     return list_sommet,noeuds
+
+def deleting_first_week(users_journey,date_list):
+    if len(date_list) < 8:
+        raise ValueError("date_list must have at least 8 elements")
+    for user in users_journey:
+        users_journey[user] = sorted(users_journey[user], key=lambda x: x['date'])
+    users_to_delete = []
+    for user, journey in users_journey.items():
+        j = -1  
+        for i, touchpoint in enumerate(journey):
+            if touchpoint["event"] == "purchase":
+                date2 = transform_date(touchpoint["date"])
+                if date_list[7] > date2:
+                    j = i
+        if  j + 1 == len(journey):
+            users_to_delete.append(user)
+        else:
+            users_journey[user] = journey[j + 1:]
+    for user in users_to_delete:
+        del users_journey[user]
+    return users_journey
+
+

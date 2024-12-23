@@ -82,30 +82,40 @@ def get_dimensions_autonomous(autonomous_paths):
     return results
 
 def attribute_purchase_value_for_channels(old_markov,new_markov,lstm_model,paths,results):
+    new_result={}
+    for noeud in results:
+        noeud=noeud.strip()
+        if noeud not in new_result:
+            new_result[noeud]={}
     for path in paths : 
         total_old_markov=0
         total_new_markov=0
         total_lstm=0
         nodes=path.split("=>")
+        channels=[]
         for node in nodes : 
             node=node.strip()
-            total_old_markov+=old_markov[node]
-            total_new_markov+=new_markov[node]
-            total_lstm+=lstm_model[node]
+            if(node not in channels):
+                total_old_markov+=old_markov[node]
+                total_new_markov+=new_markov[node]
+                total_lstm+=lstm_model[node]
+                channels.append(node)  
+        channels=[]  
         for node in nodes : 
-            if "lstm_attrbution_purchase_value" not in results[node]:
-                results[node]["lstm_attrbution_purchase_value"]=0     
-                results[node]["old_markov_attrbution_purchase_value"]=0
-                results[node]["new_markov_attrbution_purchase_value"]=0
+         node=node.strip()
+         if(node not in channels ):
+            channels.append(node)
+            if "lstm_attrbution_purchase_value" not in new_result[node]:
+                new_result[node]["lstm_attrbution_purchase_value"]=0     
+                new_result[node]["old_markov_attrbution_purchase_value"]=0
+                new_result[node]["new_markov_attrbution_purchase_value"]=0
             if(total_lstm!=0):    
-                results[node]["lstm_attrbution_purchase_value"]+= lstm_model[node]*float(paths[path]["purchase_value"])/total_lstm   
-            
+                new_result[node]["lstm_attrbution_purchase_value"]+= lstm_model[node]*float(paths[path]["purchase_value"])/total_lstm   
             if(total_old_markov!=0) :  
-                results[node]["old_markov_attrbution_purchase_value"]+=old_markov[node]*paths[path]["purchase_value"]/total_old_markov
-           
+                new_result[node]["old_markov_attrbution_purchase_value"]+=old_markov[node]*paths[path]["purchase_value"]/total_old_markov        
             if(total_new_markov!=0):     
-                results[node]["new_markov_attrbution_purchase_value"]+=new_markov[node]*paths[path]["purchase_value"]/total_new_markov
-    return results        
+                new_result[node]["new_markov_attrbution_purchase_value"]+=new_markov[node]*paths[path]["purchase_value"]/total_new_markov
+    return new_result       
 
 def synergy_between_channels(paths,noeuds):
     noeuds.append("start")
@@ -173,3 +183,14 @@ def presence__between_channels(paths,noeuds):
             else :
                 matrice[column][column2] = 0
     return matrice        
+
+def attribuate_by_date(paths_by_date,noeuds,lstm_attribution):
+    results={}
+    for date in paths_by_date:
+        total=0
+        for path in paths_by_date[date]:
+            total+=paths_by_date[date][path]["purchased"]
+        for noeud in noeuds : 
+            results[date]={}
+            results[date][noeud]=total*lstm_attribution[noeud]
+    return results        

@@ -3,6 +3,7 @@
 This file defines additional functions required for various purposes.
 """
 from datetime import datetime
+import pandas as pd 
 
 def difference_date(date1,date2):
     """""
@@ -35,3 +36,7 @@ def path_is_autonomous(path):
                     autonomous = False
                     break
             return autonomous
+def generate_range_dates(start_date,end_date):
+    date_range = pd.date_range(start=start_date, end=end_date)
+    date_list = date_range.strftime('%Y-%m-%d').tolist()
+    return date_list    

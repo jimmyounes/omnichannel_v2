@@ -193,4 +193,24 @@ def attribuate_by_date(paths_by_date,noeuds,lstm_attribution):
         for noeud in noeuds : 
             results[date]={}
             results[date][noeud]=total*lstm_attribution[noeud]
-    return results        
+    return results      
+
+def attribuate_conv_turnover_to_channels(noeuds,old_markov,new_markov,lstm_model,total_conversions,turnover):
+    results={}
+    for noeud in noeuds:
+        noeud=noeud.strip()
+        results[noeud]={}
+        if noeud in old_markov:
+            
+            results[noeud]["old_markov_attribution"]=old_markov[noeud]
+            results[noeud]["old_markov_attribution_conversions"]=old_markov[noeud]*total_conversions
+            results[noeud]["old_markov_attribution_purchase_revenue"]=old_markov[noeud]*turnover
+        if noeud in new_markov:    
+            results[noeud]["new_markov_attrbution"]=new_markov[noeud]
+            results[noeud]["new_markov_attribution_conversions"]=new_markov[noeud]*total_conversions
+            results[noeud]["new_markov_attribution_purchase_value"]=new_markov[noeud]*turnover
+        if noeud in lstm_model:
+            results[noeud]["lstm_attribution_purchase_value"]=lstm_model[noeud]["purchase_value"]
+            results[noeud]["lstm_attribution_conversions"]=lstm_model[noeud]["conversions"]
+            results[noeud]["lstm_attribution"]=results[noeud]["lstm_attribution_conversions"]/total_conversions
+    return results  

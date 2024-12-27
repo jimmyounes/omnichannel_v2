@@ -7,15 +7,11 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dropout, Dense, Masking
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import math
+import numpy as np
+import math
+from collections import defaultdict
 
 def lstm_model(paths,noeuds):
-    path_to_remove=[]
-    for path in paths:
-        if(paths[path]["purchased"]<1):
-            path_to_remove.append(path)
-    for path in path_to_remove:
-        del paths[path]  
-             
     representation_binaire={} 
     binary_length = math.ceil(math.log2(len(noeuds)))  
     noeuds.insert(0, "pad_sequence")
@@ -60,48 +56,87 @@ def lstm_model(paths,noeuds):
     model.add(Dropout(0.2))
     model.add(Dense(units=1, activation='sigmoid'))
     model.compile(optimizer='RMSprop', loss='binary_crossentropy', metrics=['accuracy'])
-    history = model.fit(X_arr, y_arr, epochs=9, batch_size=32)    
-    probabilite_paths={}
+    history = model.fit(X_arr, y_arr, epochs=6, batch_size=32)    
+    return model,representation_binaire  
+
+def preserve_ranking_and_transform(shapley_values):
+    contributions = np.array(list(shapley_values.values()))
+    touchpoints = list(shapley_values.keys())
+    relative_contributions = {key: abs(value) for key, value in shapley_values.items()}
+    max_value = max(relative_contributions.values())
+    positive_scores = {key: max_value - value for key, value in relative_contributions.items()}
+    total_score = sum(positive_scores.values())
+    normalized_scores = {key: value / total_score for key, value in positive_scores.items()}
+    return normalized_scores
+
+def reshape_input_data(input_data, binary_length):
+    if input_data.shape == (10,):  
+        return input_data[np.newaxis, np.newaxis, :]
+    elif input_data.shape == (15, binary_length):  
+        return input_data[np.newaxis, :] 
+    else:
+        raise ValueError(f"Invalid input shape: {input_data.shape}")
+
+def optimize_paths(paths, lstm_attribution, representation_binaire):
+    path_to_remove=[]
     for path in paths:
+        if(paths[path]["purchased"]==0):
+            path_to_remove.append(path)
+    for path in path_to_remove:
+        del paths[path]  
+    print(len(paths)) 
+    binary_length = math.ceil(math.log2(len(representation_binaire)))
+    for path in paths:
+        channels = set()  
+        nodes = path.split("=>")
         input_data = np.array(paths[path]["binaire_representation"])
-        if(len(paths[path]["binaire_representation"])>15):
+
+        if len(input_data) > 15:
             continue
-        if input_data.shape == (10,):  
-            input_data = input_data[np.newaxis, np.newaxis, :] 
-        elif input_data.shape == (15, binary_length):  
-            input_data = input_data[np.newaxis, :] 
-        else:
-            raise ValueError(f"Invalid input shape: {input_data.shape}")
-        probabilite_paths[path] = model.predict(input_data)  
-    all_path_prob=0
-    for path in probabilite_paths:
-        all_path_prob=all_path_prob+probabilite_paths[path]
-        
-    removal_effect = {}
-    for noeud in noeuds:
-        if(noeud!="start" and noeud!="end"):  
-            sum = 0
-            for path_str in paths:
-                noeud_present=False
-                nodes = path_str.split("=>")
-                for i in range(len(nodes)):       
-                    key=nodes[i].strip() 
-                    if key==noeud:
-                        noeud_present=True
+        input_data = reshape_input_data(input_data, binary_length)
+        p_original = lstm_attribution.predict(input_data)
+        p_total = {}
+        p_total_negative={}
+        for node in nodes:
+            node = node.strip()
+
+            if node not in channels:
+                channels.add(node)
+                new_path = []
+                for i, node2 in enumerate(nodes):
+                    if node2.strip() != node:
+                        new_path.append(representation_binaire[node2.strip()])
+                    else : 
+                        new_path.append(representation_binaire["pad_sequence"])    
+                    if i >= 14:  
                         break
-                if (noeud_present==False and path_str in probabilite_paths):
-                    sum=sum+probabilite_paths[path_str].item()
-            re=sum/all_path_prob
-            removal_effect[noeud] = 1-re 
-    total_removal_effect = 0
-    for noeud in removal_effect:
-        if(noeud!="Direct"):
-            total_removal_effect = total_removal_effect+removal_effect[noeud] 
-    normalized_re={}
-    for noeud in removal_effect:
-        if(noeud!="Direct"):
-            normalized_re[noeud] = removal_effect[noeud]/total_removal_effect
-    all=0
-    for noeud in normalized_re:
-        normalized_re[noeud]=normalized_re[noeud][0][0]
-    return normalized_re
+                while len(new_path) < 15:  
+                        new_path.append(representation_binaire["pad_sequence"])
+                input_data = np.array(new_path)
+                input_data = reshape_input_data(input_data, binary_length)
+                prediction=lstm_attribution.predict(input_data)
+                if( p_original - prediction>0):
+                    p_total[node] = p_original - prediction  
+                else : 
+                    p_total[node] = 0
+                    p_total_negative[node]=p_original - prediction
+                    
+        total = sum(p_total.values()) 
+        if(total==0):
+            p_total=preserve_ranking_and_transform(p_total_negative)
+            total=sum(p_total.values()) 
+        paths[path]["attribution"]={}
+        for node in nodes:
+            if(total!=0):
+                paths[path]["attribution"][node] = p_total[node] / total
+            else : 
+                paths[path]["attribution"][node] = 0
+    return paths
+def attribuate_conv_to_channels(paths):
+    lstm_attribution = defaultdict(lambda: {"conversions": 0, "purchase_value": 0}) 
+    for path in paths:
+        for noeud in paths[path]["attribution"]:
+            if not np.isnan(paths[path]["attribution"][noeud]):
+                lstm_attribution[noeud]["conversions"]+=paths[path]["attribution"][noeud][0][0]*paths[path]["purchased"]
+                lstm_attribution[noeud]["purchase_value"]+=paths[path]["attribution"][noeud][0][0]*paths[path]["purchase_value"]
+    return lstm_attribution            

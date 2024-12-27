@@ -3,64 +3,73 @@ File that processes retrieved Google Analytics data to construct conversion path
 
 """
 import itertools
-from utils.script import *
+from src.analyse.utils.script import *
+from collections import defaultdict
+
 
 
 def get_users_path(data):
     """"
     This function enables mapping out the user's journey path. 
     """
-    users_dict={}
+    users_dict = defaultdict(list)  
+    
     for result in data["rows"]:
-        item=result['dimensionValues']
-        if item[3]["value"] not in users_dict:
-            users_dict[item[3]["value"]]=[]
-        users_dict[item[3]["value"]].append(
-            {
-            "date" : item[0]["value"],
-            "event" : item[1]["value"],
-            "source" : item[2]["value"],
-            "purchase_value": result["metricValues"][0]["value"] 
-            })
-    return users_dict
+        item = result['dimensionValues']
+        user_id = item[3]["value"]
+        users_dict[user_id].append({
+            "date": item[0]["value"],
+            "event": item[1]["value"],
+            "source": item[2]["value"],
+            "purchase_value": result["metricValues"][0]["value"]
+        })
+    return users_dict    
 
 def build_journey_paths(users_journey):
     """""
     Builds journey path with dimensions viewed and purchased and average time to convert 
     """
     for user in users_journey:
-        users_journey[user]=sorted(users_journey[user], key=lambda x: x['date'])
-    paths={}
-    for user in users_journey:
-        path=""
-        for touchpoint in users_journey[user]:
-            touchpoint["source"]=touchpoint["source"].strip()
-            if path == "":
-                path=touchpoint["source"]
-                date1=touchpoint["date"]
-            else:
-                path=path +"=>"+ touchpoint["source"]
-            if touchpoint["event"]=="purchase":
-                date2=touchpoint["date"]
-                difference=difference_date(date1,date2)
-                if path not in paths:
-                    paths[path]={}
-                    paths[path]["purchased"]=0
-                    paths[path]["viewed"]=0
-                    paths[path]["time_to_purchase"]=[]
-                    paths[path]["purchase_value"]=0
-                paths[path]["purchased"]+=1
-                paths[path]["purchase_value"]+=float(touchpoint["purchase_value"])
-                paths[path]["time_to_purchase"].append(difference)
-                path=""
-        if path!="":
-            if path not in paths:
-                paths[path]={}
-                paths[path]["purchased"]=0
-                paths[path]["viewed"]=0
-                paths[path]["time_to_purchase"]=[]
-                paths[path]["purchase_value"]=0
-            paths[path]["viewed"]+=1
+        users_journey[user].sort(key=lambda x: x['date'])
+    
+    paths = {}
+
+    def initialize_path(path):
+        """Initialize a dictionary for a new path."""
+        return {
+            "purchased": 0,
+            "viewed": 0,
+            "time_to_purchase": [],
+            "purchase_value": 0.0
+        }
+
+    for user, journey in users_journey.items():
+        path = []
+        date1 = None
+
+        for touchpoint in journey:
+            source = touchpoint["source"].strip()
+            if not path: 
+                date1 = touchpoint["date"]
+            path.append(source)
+            if touchpoint["event"] == "purchase":
+                date2 = touchpoint["date"]
+                time_diff = difference_date(date1, date2)
+                full_path = "=>".join(path)
+
+                if full_path not in paths:
+                    paths[full_path] = initialize_path(full_path)
+                paths[full_path]["purchased"] += 1
+                paths[full_path]["purchase_value"] += float(touchpoint["purchase_value"])
+                paths[full_path]["time_to_purchase"].append(time_diff)
+                path = []  
+                date1 = None
+        if path:
+            full_path = "=>".join(path)
+            if full_path not in paths:
+                paths[full_path] = initialize_path(full_path)
+            
+            paths[full_path]["viewed"] += 1
     return paths
 
 def paths_cleaning(paths):
@@ -95,6 +104,7 @@ def paths_cleaning(paths):
         if path!="" and  path_is_autonomous(path)==False:
             if path not in path_without_direct:
                 path_without_direct[path]=paths[original_path]
+                path_without_direct[path]["time_to_purchase"]
             else:
                 path_without_direct[path]["purchased"]+=paths[original_path]["purchased"]
                 path_without_direct[path]["purchase_value"]+=paths[original_path]["purchase_value"]
@@ -106,6 +116,7 @@ def paths_cleaning(paths):
             if(path_is_autonomous(path)):
                 if path not in autonomous_paths:
                     autonomous_paths[path]=paths[original_path]
+                    autonomous_paths[path]["time_to_purchase"]
                 else:
                     autonomous_paths[path]["purchased"]+=paths[original_path]["purchased"]
                     autonomous_paths[path]["purchase_value"]+=paths[original_path]["purchase_value"]
@@ -115,13 +126,13 @@ def paths_cleaning(paths):
                         autonomous_paths[path]["time_to_purchase"]))
 
     for path in path_without_direct:
-        if path_without_direct[path]["time_to_purchase"]:
+        if "time_to_purchase" in path_without_direct[path] and len(path_without_direct[path]["time_to_purchase"])!=0:
             avg_time_to_purchase = sum(path_without_direct[path]["time_to_purchase"]) /len(path_without_direct[path]["time_to_purchase"])
         else:
             avg_time_to_purchase = None
         path_without_direct[path]["avg_time_to_purchase"]=avg_time_to_purchase
     for path in autonomous_paths:
-        if autonomous_paths[path]["time_to_purchase"]:
+        if "time_to_purchase" in autonomous_paths[path] and len(autonomous_paths[path]["time_to_purchase"])!=0:
             avg_time_to_purchase = sum(autonomous_paths[path]["time_to_purchase"]) /len(autonomous_paths[path]["time_to_purchase"])
         else:
             avg_time_to_purchase = None
@@ -133,55 +144,26 @@ def assembly_purchases_by_date(users_dict):
     Assembly purchases by date
     """
     for user in users_dict:
-        users_dict[user]=sorted(users_dict[user], key=lambda x: x['date'])
-    date_autonomous_results={}
-    date_results={}
-    for user in users_dict:
-        path=""
-        for touchpoint in users_dict[user]:
-            
-            touchpoint["source"]=touchpoint["source"].strip()
-            if path=="":
-                path=touchpoint["source"]
-            else :
-                path=path +"=>"+ touchpoint["source"]
-            if touchpoint["event"]=="purchase":
-                date2=touchpoint["date"]
-                date2=transform_date(date2)
-                nodes = path.split("=>")
-                key = nodes[0].strip()
-                autonomous = True
-                for i in range(1,len(nodes)):
-                    if key!=nodes[i].strip():
-                        autonomous = False
-                if autonomous is False:
-                    
-                    if date2 not in date_results:
-                        date_results[date2]={}
-                    if path not in date_results[date2]:
-                        date_results[date2][path]={}
-                        date_results[date2][path]["purchased"]=1
-                        date_results[date2][path]["purchase_value"]=touchpoint["purchase_value"]
-                    else:
-                        date_results[date2][path]["purchased"]+=1
-                        date_results[date2][path]["purchase_value"]+=touchpoint["purchase_value"]
-                    
-                    path=""
+        users_dict[user].sort(key=lambda x: x['date'])
+    date_autonomous_results = defaultdict(lambda: defaultdict(lambda: {"purchased": 0, "purchase_value": 0}))
+    date_results = defaultdict(lambda: defaultdict(lambda: {"purchased": 0, "purchase_value": 0}))
+    for user, touchpoints in users_dict.items():
+        path = []
+        for touchpoint in touchpoints:
+            source = touchpoint["source"].strip()
+            path.append(source)
+            if touchpoint["event"] == "purchase":
+                date2 = transform_date(touchpoint["date"])
+                path_str = "=>".join(path)
+                if len(set(path)) == 1:  
+                    result_dict = date_autonomous_results
                 else:
-                    if date2 not in date_autonomous_results:
-                        date_autonomous_results[date2]={}
-                    if path not in date_autonomous_results[date2]:
-                        date_autonomous_results[date2][path]={}
-                        date_autonomous_results[date2][path]["purchased"]=1
-                        date_autonomous_results[date2][path]["purchase_value"]=touchpoint["purchase_value"]
-                    else:
-                        date_autonomous_results[date2][path]["purchased"]+=1
-                        date_autonomous_results[date2][path]["purchase_value"]+=touchpoint["purchase_value"]
-                    path=""
-                   
-    return date_results,date_autonomous_results
+                    result_dict = date_results
+                result_dict[date2][path_str]["purchased"] += 1
+                result_dict[date2][path_str]["purchase_value"] += float(touchpoint["purchase_value"])
+                path = []
+    return dict(date_results), dict(date_autonomous_results)
 def paths_cleaning_by_date(date_results,date_autnomous_results):
-    
     path_without_direct={}
     for date in date_results:
         path_without_direct[date]={}
@@ -210,29 +192,43 @@ def paths_cleaning_by_date(date_results,date_autnomous_results):
                         
                         date_autnomous_results[date][path]["purchased"]+=date_results[date][original_path]["purchased"]
                         date_autnomous_results[date][path]["purchase_value"]+=date_results[date][original_path]["purchase_value"]
-    return path_without_direct,date_autnomous_results             
-    
-def compute_conv_for_channel_in_autonomous_paths(autonomous_path):
-    """
-    Calculate number of conversions and purchase value  for channel in autonomous path 
-    """
-    channels_autonomous={}
-    for path in autonomous_path :
-        key = path.split("=>")
-        channel = key[0].strip()
-        if channel in channels_autonomous:
-            channels_autonomous[channel]["purchased"] += autonomous_path[path]["purchased"] + channels_autonomous[channel]["purchased"]
-            channels_autonomous[channel]["purchase_value"] += autonomous_path[path]["purchase_value"] + channels_autonomous[channel]["purchase_value"]
-        else :
-            channels_autonomous[channel] ={}
-            channels_autonomous[channel]["purchased"] =  autonomous_path[path]["purchased"]
-            channels_autonomous[channel]["purchase_value"] = autonomous_path[path]["purchase_value"]
-    return channels_autonomous
+    return path_without_direct,date_autnomous_results 
 
+def analyse_summary(multifunnels_paths,autonomous_paths,noeuds):
+    total_conversions=0
+    total_purchase_value=0
+    number_of_paths=0
+    conversions_multichannel_paths=0
+    purchase_value_multichannel_paths=0
+    conversions_autonomous_paths=0
+    purchase_value_autonomous_paths=0
+    for path in multifunnels_paths:
+        conversions_multichannel_paths+=multifunnels_paths[path]["purchased"]
+        total_conversions+=multifunnels_paths[path]["purchased"]
+        number_of_paths+=1
+        total_purchase_value+=multifunnels_paths[path]["purchase_value"]
+        purchase_value_multichannel_paths+=multifunnels_paths[path]["purchase_value"]
+    for path in autonomous_paths : 
+        conversions_autonomous_paths+=autonomous_paths[path]["purchased"]
+        total_conversions+=autonomous_paths[path]["purchased"]
+        number_of_paths+=1
+        total_purchase_value+=autonomous_paths[path]["purchase_value"]
+        purchase_value_autonomous_paths+=autonomous_paths[path]["purchase_value"]
+
+    results={
+        "total_conversions":total_conversions,
+        "turnover" : total_purchase_value , 
+        "number_of_paths" : number_of_paths,
+        "nb_multichannel_path" : len(multifunnels_paths),
+        "nb_autonomous_path" : len(autonomous_paths),
+        "number_of_channels" : len(noeuds),
+        "multichannels_conversions" : conversions_multichannel_paths,
+        "multichannels_purchase_value" : purchase_value_multichannel_paths,
+        "autonomous_conversions" : conversions_autonomous_paths,
+        "autonomous_purchase_value" : purchase_value_autonomous_paths
+    }
+    return results
 def channels_roles(multichannel_paths):
-    """
-    Define number of conversions and purchase value for channels in each roles 
-    """
     noeuds=[]
     for path in multichannel_paths:
         path=path.split("=>")
@@ -281,9 +277,11 @@ def deleting_first_week(users_journey,date_list):
         raise ValueError("date_list must have at least 8 elements")
     for user in users_journey:
         users_journey[user] = sorted(users_journey[user], key=lambda x: x['date'])
+    
     users_to_delete = []
+    
     for user, journey in users_journey.items():
-        j = -1  
+        j = -1
         for i, touchpoint in enumerate(journey):
             if touchpoint["event"] == "purchase":
                 date2 = transform_date(touchpoint["date"])
@@ -295,6 +293,7 @@ def deleting_first_week(users_journey,date_list):
             users_journey[user] = journey[j + 1:]
     for user in users_to_delete:
         del users_journey[user]
-    return users_journey
+    
+    return users_journey  
 
 

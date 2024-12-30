@@ -30,11 +30,11 @@ async def main():
     """
     start_time_process = time.time()
     start_time = time.time()
-    #data=await fetching_main_process(dimensions,metriques,start_date,end_date,filter,
-    #                      access_token,refresh_token,client_id,
-    #                      client_secret,DISCOVERY_URL,property_id)
-    with open("data_property10.json","r") as file :
-        data=json.load(file)
+    data=await fetching_main_process(dimensions,metriques,start_date,end_date,filter,
+                          access_token,refresh_token,client_id,
+                          client_secret,DISCOVERY_URL,property_id)
+    #with open("data_property10.json","r") as file :
+    #    data=json.load(file)
     end_time = time.time()
     elapsed_time = end_time - start_time
     print(f"Extraction data  took {elapsed_time:.2f} seconds to execute.")
@@ -49,7 +49,7 @@ async def main():
     users_journey=deleting_first_week(users_journey,date_list)  
     end_time = time.time()
     elapsed_time = end_time - start_time
-    print(f"Extraction data  took {elapsed_time:.2f} seconds to execute.")
+    print(f"data cleaning  took {elapsed_time:.2f} seconds to execute.")
  
     """
     Building paths  
@@ -84,7 +84,15 @@ async def main():
     """
     start_time = time.time()
     list_sommet,noeuds=channels_roles(paths)
+    """
+    lstm training
+    """
+    start_time = time.time()
     lstm_attribution,representation_binaire=lstm_model(paths,noeuds)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"lstm training  took {elapsed_time:.2f} seconds to execute.")
+    
     results=analyse_summary(paths,autonomous_paths,noeuds)
     matrice=synergy_between_channels(paths,noeuds)
     dimension_path_by_channel=dimensions_path_by_channels(noeuds,paths)
